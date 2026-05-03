@@ -4,8 +4,10 @@ import (
 	"context"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/zrks/sec-api/internal/scanner"
+	mdns "github.com/miekg/dns"
 )
 
 // Scanner implements scanner.Scanner for DNS records.
@@ -30,13 +32,14 @@ func (s *Scanner) Name() string {
 func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Observation, error) {
 	domain := target.Domain
 	var obs []scanner.Observation
+	resolver := net.DefaultResolver
 
 	// A and AAAA records
-	ips, err := net.LookupIP(domain)
+	ipAddrs, err := resolver.LookupIPAddr(ctx, domain)
 	if err == nil {
 		var v4, v6 []string
-		for _, ip := range ips {
-			if ip.To4() != nil {
+		for _, ip := range ipAddrs {
+			if ip.IP.To4() != nil {
 				v4 = append(v4, ip.String())
 			} else {
 				v6 = append(v6, ip.String())
@@ -61,7 +64,7 @@ func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Ob
 	}
 
 	// CNAME record (canonical name). net.LookupCNAME returns the canonical name for the host.
-	cname, err := net.LookupCNAME(domain)
+	cname, err := resolver.LookupCNAME(ctx, domain)
 	if err == nil && cname != domain+"." {
 		// remove trailing dot for canonical name
 		cname = strings.TrimSuffix(cname, ".")
@@ -74,7 +77,7 @@ func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Ob
 	}
 
 	// MX records
-	mxRecords, err := net.LookupMX(domain)
+	mxRecords, err := resolver.LookupMX(ctx, domain)
 	if err == nil && len(mxRecords) > 0 {
 		var servers []map[string]any
 		for _, mx := range mxRecords {
@@ -92,7 +95,7 @@ func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Ob
 	}
 
 	// NS records
-	nsRecords, err := net.LookupNS(domain)
+	nsRecords, err := resolver.LookupNS(ctx, domain)
 	if err == nil && len(nsRecords) > 0 {
 		var hosts []string
 		for _, ns := range nsRecords {
@@ -107,7 +110,7 @@ func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Ob
 	}
 
 	// TXT records (generic)
-	txtRecords, err := net.LookupTXT(domain)
+	txtRecords, err := resolver.LookupTXT(ctx, domain)
 	if err == nil && len(txtRecords) > 0 {
 		obs = append(obs, scanner.Observation{
 			Category: "dns",
@@ -131,11 +134,22 @@ func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Ob
 			Key:      "SPF",
 			Value:    map[string]any{"records": spf},
 		})
+		for _, record := range spf {
+			if strings.Contains(strings.ToLower(record), "+all") {
+				obs = append(obs, scanner.Observation{
+					Category: "dns",
+					Subject:  domain,
+					Key:      "SPF_WEAK_ALL",
+					Value:    map[string]any{"record": record},
+				})
+				break
+			}
+		}
 	}
 
 	// DMARC record: look up _dmarc.domain
 	dmarcDomain := "_dmarc." + domain
-	dmarcTxt, err := net.LookupTXT(dmarcDomain)
+	dmarcTxt, err := resolver.LookupTXT(ctx, dmarcDomain)
 	if err == nil && len(dmarcTxt) > 0 {
 		obs = append(obs, scanner.Observation{
 			Category: "dns",
@@ -145,8 +159,45 @@ func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Ob
 		})
 	}
 
-	// CAA record: there is no direct net.LookupCAA in Go, but we can use LookupTXT on the domain to search for CAA; however, CAA has type code 257.
-	// For MVP, skip actual CAA parsing due to library limitations.
+	// CAA records
+	if caaRecords, err := lookupCAA(ctx, domain); err == nil && len(caaRecords) > 0 {
+		obs = append(obs, scanner.Observation{
+			Category: "dns",
+			Subject:  domain,
+			Key:      "CAA",
+			Value:    map[string]any{"records": caaRecords},
+		})
+	}
 
 	return obs, nil
+}
+
+func lookupCAA(ctx context.Context, domain string) ([]map[string]any, error) {
+	config, err := mdns.ClientConfigFromFile("/etc/resolv.conf")
+	if err != nil || len(config.Servers) == 0 {
+		return nil, err
+	}
+
+	message := new(mdns.Msg)
+	message.SetQuestion(mdns.Fqdn(domain), mdns.TypeCAA)
+	client := &mdns.Client{Timeout: 5 * time.Second}
+	server := net.JoinHostPort(config.Servers[0], config.Port)
+	response, _, err := client.ExchangeContext(ctx, message, server)
+	if err != nil {
+		return nil, err
+	}
+
+	var records []map[string]any
+	for _, answer := range response.Answer {
+		caa, ok := answer.(*mdns.CAA)
+		if !ok {
+			continue
+		}
+		records = append(records, map[string]any{
+			"flag":  caa.Flag,
+			"tag":   caa.Tag,
+			"value": caa.Value,
+		})
+	}
+	return records, nil
 }

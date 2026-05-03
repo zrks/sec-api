@@ -29,149 +29,69 @@ func (s *Scanner) Name() string {
 // HEAD request first; if HEAD is not allowed, it falls back to GET. The
 // result includes observations for each relevant security header.
 func (s *Scanner) Scan(ctx context.Context, target scanner.Target) ([]scanner.Observation, error) {
-	var obs []scanner.Observation
-	// Build a base URL for HTTPS first.
-	url := "https://" + target.Domain
-	client := &http.Client{Timeout: 15 * time.Second}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	// Try HEAD request
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
-	if err != nil {
-		// this shouldn't happen
-		return nil, err
+	var obs []scanner.Observation
+	client := &http.Client{Timeout: 10 * time.Second}
+	targets := []string{target.Domain}
+	if !strings.HasPrefix(target.Domain, "www.") {
+		targets = append(targets, "www."+target.Domain)
 	}
-	resp, err := client.Do(req)
+	for _, hostname := range targets {
+		obs = append(obs, scanHTTP(ctx, client, hostname)...)
+	}
+
+	return obs, nil
+}
+
+func scanHTTP(ctx context.Context, client *http.Client, hostname string) []scanner.Observation {
+	url := "https://" + hostname
+	resp, err := requestWithFallback(ctx, client, url)
 	if err != nil {
-		// attempt HTTP (non-SSL) as fallback
-		urlHTTP := "http://" + target.Domain
-		reqHTTP, err2 := http.NewRequestWithContext(ctx, http.MethodHead, urlHTTP, nil)
-		if err2 == nil {
-			resp, err2 = client.Do(reqHTTP)
-			if err2 == nil {
-				// record that HTTPS failed but HTTP succeeded
-				obs = append(obs, scanner.Observation{
-					Category: "http",
-					Subject:  target.Domain,
-					Key:      "https_error",
-					Value: map[string]any{
-						"error": err.Error(),
-					},
-				})
-			}
-		}
-		// if still failing, return the error observation
-		if resp == nil {
-			obs = append(obs, scanner.Observation{
-				Category: "http",
-				Subject:  target.Domain,
-				Key:      "request_error",
-				Value: map[string]any{
-					"error": err.Error(),
-				},
-			})
-			return obs, nil
-		}
+		return []scanner.Observation{{Category: "http", Subject: hostname, Key: "https_error", Value: map[string]any{"error": err.Error()}}}
 	}
 	defer resp.Body.Close()
 
-	// Evaluate selected security headers
+	var obs []scanner.Observation
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "status", Value: map[string]any{"code": resp.StatusCode, "final_url": resp.Request.URL.String(), "final_scheme": resp.Request.URL.Scheme}})
 	headers := resp.Header
-	// Strict-Transport-Security (HSTS)
-	hsts := headers.Get("Strict-Transport-Security")
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "hsts",
-		Value: map[string]any{
-			"value":   hsts,
-			"present": hsts != "",
-		},
-	})
-	// Content-Security-Policy
-	csp := headers.Get("Content-Security-Policy")
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "csp",
-		Value: map[string]any{
-			"value":   csp,
-			"present": csp != "",
-		},
-	})
-	// X-Frame-Options
-	xfo := headers.Get("X-Frame-Options")
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "x_frame_options",
-		Value: map[string]any{
-			"value":   xfo,
-			"present": xfo != "",
-		},
-	})
-	// X-Content-Type-Options
-	xcto := headers.Get("X-Content-Type-Options")
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "x_content_type_options",
-		Value: map[string]any{
-			"value":   xcto,
-			"present": xcto != "",
-		},
-	})
-	// Referrer-Policy
-	ref := headers.Get("Referrer-Policy")
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "referrer_policy",
-		Value: map[string]any{
-			"value":   ref,
-			"present": ref != "",
-		},
-	})
-	// Permissions-Policy
-	perm := headers.Get("Permissions-Policy")
-	if perm == "" {
-		// older name: Feature-Policy
-		perm = headers.Get("Feature-Policy")
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "headers", Value: map[string]any{"header_count": len(headers)}})
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "hsts", Value: map[string]any{"value": headers.Get("Strict-Transport-Security"), "present": headers.Get("Strict-Transport-Security") != ""}})
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "csp", Value: map[string]any{"value": headers.Get("Content-Security-Policy"), "present": headers.Get("Content-Security-Policy") != ""}})
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "x_frame_options", Value: map[string]any{"value": headers.Get("X-Frame-Options"), "present": headers.Get("X-Frame-Options") != ""}})
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "x_content_type_options", Value: map[string]any{"value": headers.Get("X-Content-Type-Options"), "present": headers.Get("X-Content-Type-Options") != ""}})
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "referrer_policy", Value: map[string]any{"value": headers.Get("Referrer-Policy"), "present": headers.Get("Referrer-Policy") != ""}})
+	permissionsPolicy := headers.Get("Permissions-Policy")
+	if permissionsPolicy == "" {
+		permissionsPolicy = headers.Get("Feature-Policy")
 	}
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "permissions_policy",
-		Value: map[string]any{
-			"value":   perm,
-			"present": perm != "",
-		},
-	})
-	// Server header (information leakage)
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "permissions_policy", Value: map[string]any{"value": permissionsPolicy, "present": permissionsPolicy != ""}})
 	server := headers.Get("Server")
-	// Only record a trimmed prefix (to avoid storing long values) for demonstration
 	trimmed := server
 	if len(trimmed) > 64 {
 		trimmed = trimmed[:64]
 	}
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "server_header",
-		Value: map[string]any{
-			"value":   trimmed,
-			"present": server != "",
-		},
-	})
-	// HTTPS redirect check: if final URL scheme is https or http
-	scheme := strings.Split(resp.Request.URL.Scheme, ":")[0]
-	obs = append(obs, scanner.Observation{
-		Category: "http",
-		Subject:  target.Domain,
-		Key:      "final_scheme",
-		Value: map[string]any{
-			"scheme": scheme,
-		},
-	})
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "server_header", Value: map[string]any{"value": trimmed, "present": server != ""}})
+	obs = append(obs, scanner.Observation{Category: "http", Subject: hostname, Key: "final_scheme", Value: map[string]any{"scheme": strings.Split(resp.Request.URL.Scheme, ":")[0]}})
+	return obs
+}
 
-	return obs, nil
+func requestWithFallback(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(headReq)
+	if err == nil && resp.StatusCode != http.StatusMethodNotAllowed {
+		return resp, nil
+	}
+	if resp != nil {
+		resp.Body.Close()
+	}
+	getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return client.Do(getReq)
 }

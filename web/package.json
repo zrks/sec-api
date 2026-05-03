@@ -1,0 +1,14 @@
+{
+  "name": "domainriskdigest-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "node --check src/main.js src/api.js"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}
