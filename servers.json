@@ -1,0 +1,16 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "sec-api",
+      "Group": "Local",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "sec-api",
+      "Username": "postgres",
+      "ConnectionParameters": {
+        "sslmode": "disable",
+        "passfile": "/pgpassfile"
+      }
+    }
+  }
+}

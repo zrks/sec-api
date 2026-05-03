@@ -1,0 +1,19 @@
+# Binary and build outputs
+bin/
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+
+# Local environment files
+.env
+.env.local
+
+# IDE files
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/

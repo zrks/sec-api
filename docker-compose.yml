@@ -1,0 +1,50 @@
+
+services:
+  # PostgreSQL database for the DomainRiskDigest application
+  postgres:
+    image: postgres:18.3
+    container_name: postgres-interlinedlist
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: sec-api
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sec-api"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - sec-api-data:/var/lib/postgresql/data
+      - ./migrations/000001_init.sql:/docker-entrypoint-initdb.d/000001_init.sql:ro
+
+  # pgAdmin 4 web interface for managing the sec-api database
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin4
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Required admin credentials [oai_citation:3‡pgadmin.org](https://www.pgadmin.org/docs/pgadmin4/latest/container_deployment.html#:~:text=PGADMIN_DEFAULT_EMAIL).
+      PGADMIN_DEFAULT_EMAIL: pgadmin@local.test
+      PGADMIN_DEFAULT_PASSWORD: ChangeMeLocalOnly123!
+      # Use a non‑privileged port (>1024) on hosts that restrict low ports [oai_citation:4‡pgadmin.org](https://www.pgadmin.org/docs/pgadmin4/latest/container_deployment.html#:~:text=possible%20to%20run%20pgAdmin%20without,the%20environment%20variable%2C%20for%20example).
+      PGADMIN_LISTEN_PORT: 5050
+      # Reload server definitions on every start.
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+      # Let pgAdmin use a mounted pgpass file so the server is ready to connect.
+      PGPASS_FILE: /pgpassfile
+    ports:
+      - "5050:5050"
+    volumes:
+      # Persist pgAdmin session data and configuration
+      - pgadmin-data:/var/lib/pgadmin
+      # Preload connection details for the sec-api database
+      - ./servers.json:/pgadmin4/servers.json
+      - ./.pgpass:/pgpassfile:ro
+
+volumes:
+  sec-api-data:
+  pgadmin-data:
