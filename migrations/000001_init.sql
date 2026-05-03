@@ -1,3 +1,5 @@
+create extension if not exists pg_stat_statements;
+
 create table if not exists organizations (
   id uuid primary key,
   name text not null,

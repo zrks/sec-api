@@ -35,6 +35,13 @@ Build the Docker images:
 docker compose build api worker
 ```
 
+Build or restart Postgres with database stats and file logging enabled:
+
+```sh
+docker compose build
+docker compose up -d postgres
+```
+
 ## Run
 
 ### Docker stack
@@ -57,6 +64,8 @@ Apply the schema manually if needed:
 ```sh
 make migrate
 ```
+
+This also creates the `pg_stat_statements` extension in the `sec-api` database.
 
 ### Local backend
 
@@ -131,6 +140,12 @@ npm run dev
 - API: `http://localhost:8080`
 - Web app: `http://localhost:5173`
 - Built-in API test UI: `http://localhost:8080/`
+
+Postgres observability enabled locally:
+- `pg_stat_statements` extension in database `sec-api`
+- file logging via the Postgres `log/` directory inside the persistent database volume
+- `auto_explain` for slow query execution plans
+- connection, checkpoint, lock-wait, and temp-file logging
 
 The Docker Compose stack now starts these services together:
 - `postgres`
@@ -290,3 +305,65 @@ Build the web app:
 cd web
 npm run build
 ```
+
+## Postgres stats and logs
+
+Restart Postgres after pulling these config changes:
+
+```sh
+docker compose up -d postgres
+make migrate
+```
+
+Check that `pg_stat_statements` is enabled:
+
+```sh
+docker compose exec postgres psql -U postgres -d sec-api -c "select * from pg_extension where extname = 'pg_stat_statements';"
+```
+
+Query statement stats:
+
+```sh
+docker compose exec postgres psql -U postgres -d sec-api -c "select query, calls, total_exec_time from pg_stat_statements order by total_exec_time desc limit 10;"
+```
+
+Or use the Makefile helper:
+
+```sh
+make pg-stats
+```
+
+Reset accumulated statement stats:
+
+```sh
+make pg-stats-reset
+```
+
+Check active observability settings:
+
+```sh
+make pg-settings
+```
+
+Read Postgres logs:
+
+```sh
+docker compose exec postgres ls /var/lib/postgresql/18/docker/log
+docker compose exec postgres sh -lc 'cat /var/lib/postgresql/18/docker/log/$(ls /var/lib/postgresql/18/docker/log | sort | tail -n 1)'
+```
+
+Or use the Makefile helpers:
+
+```sh
+make pg-logs
+make pg-logs-latest
+```
+
+Enabled slow-query diagnostics:
+- `log_min_duration_statement=250ms`
+- `auto_explain.log_min_duration=500ms`
+- `auto_explain.log_analyze=on`
+- `auto_explain.log_buffers=on`
+- `auto_explain.log_verbose=on`
+
+These settings persist through container restarts because logs are written under the Postgres data directory in the persistent volume.
