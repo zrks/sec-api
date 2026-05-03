@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+.env.local
+.pgpass
+bin
+build
+coverage
+dist

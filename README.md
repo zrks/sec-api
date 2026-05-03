@@ -4,7 +4,7 @@ DomainRiskDigest is a small Go service for monitoring verified domains and stori
 
 ## Local setup
 
-1. Start the local database stack:
+1. Start the full local stack:
 
 ```sh
 make docker-up
@@ -21,13 +21,13 @@ HIBP_API_KEY=
 NVD_API_KEY=
 ```
 
-3. Run the API:
+3. Or run only the API locally without Docker:
 
 ```sh
 make run-api
 ```
 
-4. In another terminal, run the worker:
+4. In another terminal, run the worker locally without Docker:
 
 ```sh
 make run-worker
@@ -38,6 +38,12 @@ make run-worker
 - PostgreSQL: `localhost:5432`
 - pgAdmin: `http://localhost:5050`
 - API: `http://localhost:8080`
+
+The Docker Compose stack now starts these services together:
+- `postgres`
+- `pgadmin`
+- `api`
+- `worker`
 
 pgAdmin login:
 - email: `pgadmin@local.test`
