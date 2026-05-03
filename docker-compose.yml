@@ -3,7 +3,7 @@ services:
   # PostgreSQL database for the DomainRiskDigest application
   postgres:
     image: postgres:18.3
-    container_name: postgres-interlinedlist
+    container_name: postgres-sec-api
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
@@ -16,12 +16,12 @@ services:
       timeout: 5s
       retries: 10
     volumes:
-      - sec-api-data:/var/lib/postgresql/data
+      - sec-api-data-v18:/var/lib/postgresql
       - ./migrations/000001_init.sql:/docker-entrypoint-initdb.d/000001_init.sql:ro
 
   # pgAdmin 4 web interface for managing the sec-api database
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.14
     container_name: pgadmin4
     depends_on:
       postgres:
@@ -79,5 +79,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  sec-api-data:
+  sec-api-data-v18:
   pgadmin-data:
