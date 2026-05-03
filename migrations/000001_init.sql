@@ -35,6 +35,18 @@ create table if not exists observations (
   observed_at timestamptz not null default now()
 );
 
+create table if not exists findings (
+  id uuid primary key,
+  scan_run_id uuid not null references scan_runs(id) on delete cascade,
+  domain_id uuid not null references domains(id) on delete cascade,
+  severity text not null,
+  title text not null,
+  description text not null,
+  recommendation text not null,
+  evidence jsonb not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists reports (
   id uuid primary key,
   scan_run_id uuid not null references scan_runs(id) on delete cascade,

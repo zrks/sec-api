@@ -28,13 +28,13 @@ type Scanner interface {
 // along with the observations collected so far. This simple helper makes
 // orchestrating multiple scanner implementations easier.
 func Run(ctx context.Context, scanners []Scanner, target Target) ([]Observation, error) {
-    var all []Observation
-    for _, s := range scanners {
-        obs, err := s.Scan(ctx, target)
-        if err != nil {
-            return all, err
-        }
-        all = append(all, obs...)
-    }
-    return all, nil
+	var all []Observation
+	for _, s := range scanners {
+		obs, err := s.Scan(ctx, target)
+		if err != nil {
+			return all, err
+		}
+		all = append(all, obs...)
+	}
+	return all, nil
 }
