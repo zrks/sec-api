@@ -49,12 +49,14 @@ docker build --target kuberhealthy-api-check -t your-registry/domainriskdigest-k
 
 ## CI
 
-GitHub Actions CI is defined in `.github/workflows/ci.yml`.
-It runs:
+GitHub Actions CI is split across two workflows:
+
+- `.github/workflows/ci.yml` for build, package, and SonarQube tasks
+- `.github/workflows/playwright.yml` for visual regression testing and GitHub Pages report publishing
+
+The main CI workflow runs:
 
 - frontend dependency install and `npm run lint`
-- Playwright visual regression tests with an uploaded HTML report
-- GitHub Pages publication of the Playwright HTML report on `main` and `master` pushes
 - `go test -coverprofile=coverage.out ./...`
 - frontend production build
 - Go binary builds for `api`, `worker`, and `kuberhealthy-api-check`
@@ -75,9 +77,9 @@ The workflow uploads a distribution artifact containing:
 - built frontend assets from `web/dist`
 - `README.md`
 
-The workflow also uploads a `playwright-report` artifact with the visual test HTML report and any failure attachments.
+The Playwright workflow uploads a `playwright-report` artifact with the visual test HTML report and any failure attachments.
 
-For pushes to `main` or `master`, the same Playwright HTML report is also published to GitHub Pages through the workflow.
+For pushes to `main` or `master`, the Playwright workflow also publishes the same HTML report to GitHub Pages.
 Enable GitHub Pages for the repository using GitHub Actions as the source if it is not already enabled.
 
 Build or restart Postgres with database stats and file logging enabled:
