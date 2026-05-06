@@ -106,6 +106,16 @@ func allowCORS(next http.Handler) http.Handler {
 	})
 }
 
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func defaultScanners() []scanner.Scanner {
 	return []scanner.Scanner{dnsScanner.New(), subdomainScanner.New(), rdapScanner.New(), tlsScanner.New(), httpScanner.New()}
 }
@@ -115,22 +125,9 @@ func writeStoredReport(w http.ResponseWriter, report dbpkg.LatestReport) {
 	_, _ = w.Write(report.Data)
 }
 
-func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
-
-	addr := cfg.HTTPAddr
-	dsn := cfg.DatabaseURL
-	ctx := context.Background()
-	db, err := dbpkg.New(ctx, dsn)
-	if err != nil {
-		log.Fatalf("failed to connect database: %v", err)
-	}
-	defer db.Close()
-
+func newRouter(db *dbpkg.DB) http.Handler {
 	r := chi.NewRouter()
+	r.Use(securityHeaders)
 	r.Use(allowCORS)
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -409,6 +406,26 @@ func main() {
 		}
 		writeStoredReport(w, report)
 	})
+
+	return r
+}
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	addr := cfg.HTTPAddr
+	dsn := cfg.DatabaseURL
+	ctx := context.Background()
+	db, err := dbpkg.New(ctx, dsn)
+	if err != nil {
+		log.Fatalf("failed to connect database: %v", err)
+	}
+	defer db.Close()
+
+	r := newRouter(db)
 
 	srv := &http.Server{
 		Addr:         addr,

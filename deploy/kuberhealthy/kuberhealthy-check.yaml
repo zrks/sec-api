@@ -1,0 +1,33 @@
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: domainriskdigest-api-check
+  namespace: kuberhealthy
+spec:
+  runInterval: 5m
+  timeout: 2m
+  podSpec:
+    containers:
+      - name: main
+        image: your-registry/domainriskdigest-kuberhealthy-check:latest
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: API_BASE_URL
+            value: http://api.default.svc.cluster.local:8080
+          - name: CHECK_ROOT_HEADERS
+            value: "true"
+          - name: REQUIRE_HTTPS
+            value: "false"
+          - name: REQUEST_TIMEOUT
+            value: 5s
+          - name: ALLOWED_CORS_ORIGIN
+            value: http://localhost:5173
+          - name: BLOCKED_CORS_ORIGIN
+            value: https://example.com
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

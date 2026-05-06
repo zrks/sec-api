@@ -21,6 +21,12 @@ Build the Go binaries:
 go build ./...
 ```
 
+Run the Go tests:
+
+```sh
+make test
+```
+
 Build the web app:
 
 ```sh
@@ -33,6 +39,12 @@ Build the Docker images:
 
 ```sh
 docker compose build api worker
+```
+
+Build the Kuberhealthy checker image:
+
+```sh
+docker build --target kuberhealthy-api-check -t your-registry/domainriskdigest-kuberhealthy-check:latest .
 ```
 
 Build or restart Postgres with database stats and file logging enabled:
@@ -169,6 +181,12 @@ make migrate
 
 ## Basic checks
 
+Run all Go tests:
+
+```sh
+go test ./...
+```
+
 Frontend environment:
 
 ```text
@@ -235,6 +253,65 @@ Fetch a stored report by report id:
 ```sh
 curl http://localhost:8080/api/v1/reports/<report-id>
 ```
+
+## Kuberhealthy
+
+This repo includes a small Kuberhealthy external check at `cmd/kuberhealthy-api-check`.
+It verifies:
+
+- `GET /healthz` returns `200` and `ok`
+- `GET /api/v1/version` returns JSON with a non-empty `version`
+- localhost CORS preflight is allowed
+- a foreign origin is not reflected by CORS
+- baseline security headers are present on the local web UI root page
+
+Build the checker binary locally:
+
+```sh
+go build ./cmd/kuberhealthy-api-check
+```
+
+Build and push the checker image:
+
+```sh
+docker build --target kuberhealthy-api-check -t your-registry/domainriskdigest-kuberhealthy-check:latest .
+docker push your-registry/domainriskdigest-kuberhealthy-check:latest
+```
+
+Install Kuberhealthy in your cluster using the upstream project instructions:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/kuberhealthy/kuberhealthy/master/deploy/kuberhealthy.yaml
+```
+
+Review and update the example check manifest:
+
+```sh
+sed -n '1,200p' deploy/kuberhealthy/kuberhealthy-check.yaml
+```
+
+Replace these values before applying it:
+
+- `image`: your pushed checker image
+- `API_BASE_URL`: the in-cluster URL for this API service
+- `REQUIRE_HTTPS=true` when the target URL is expected to be HTTPS end to end
+
+Apply the example check:
+
+```sh
+kubectl apply -f deploy/kuberhealthy/kuberhealthy-check.yaml
+```
+
+Useful checker environment variables:
+
+- `API_BASE_URL`: required base URL to test
+- `CHECK_ROOT_HEADERS`: set to `false` if a reverse proxy owns browser headers instead of the app
+- `REQUIRE_HTTPS`: set to `true` to fail non-HTTPS base URLs
+- `REQUEST_TIMEOUT`: per-request timeout such as `5s`
+- `ALLOWED_CORS_ORIGIN`: expected localhost origin for positive CORS verification
+- `BLOCKED_CORS_ORIGIN`: origin that must not be reflected by CORS
+
+This checker is intentionally limited to safe synthetic verification. It does not perform port scanning, exploit testing, brute force checks, or invasive scanning.
 
 ## Manual web app flow
 
