@@ -6,9 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "node --check src/main.js src/api.js"
+    "lint": "node --check src/main.js src/api.js",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots",
+    "test:visual:report": "playwright show-report"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "vite": "^5.4.10"
   }
 }

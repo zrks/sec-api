@@ -53,6 +53,7 @@ GitHub Actions CI is defined in `.github/workflows/ci.yml`.
 It runs:
 
 - frontend dependency install and `npm run lint`
+- Playwright visual regression tests with an uploaded HTML report
 - `go test -coverprofile=coverage.out ./...`
 - frontend production build
 - Go binary builds for `api`, `worker`, and `kuberhealthy-api-check`
@@ -72,6 +73,8 @@ The workflow uploads a distribution artifact containing:
 - `migrations/`
 - built frontend assets from `web/dist`
 - `README.md`
+
+The workflow also uploads a `playwright-report` artifact with the visual test HTML report and any failure attachments.
 
 Build or restart Postgres with database stats and file logging enabled:
 
@@ -138,6 +141,28 @@ Run the web app locally in another terminal:
 cd web
 npm install
 npm run dev
+```
+
+Run the visual regression tests locally:
+
+```sh
+cd web
+npx playwright install chromium
+npm run test:visual
+```
+
+Update the visual snapshot baselines when the UI change is intentional:
+
+```sh
+cd web
+npm run test:visual:update
+```
+
+Open the visual HTML report:
+
+```sh
+cd web
+npm run test:visual:report
 ```
 
 The web UI is plain JavaScript with no runtime frontend dependencies.
