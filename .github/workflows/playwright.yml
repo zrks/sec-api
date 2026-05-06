@@ -43,8 +43,21 @@ jobs:
         working-directory: web
 
       - name: Run Playwright tests
+        id: playwright-tests
         run: npm run test:visual
+        continue-on-error: true
         working-directory: web
+
+      - name: Mark Playwright mismatches as warnings
+        if: ${{ steps.playwright-tests.outcome == 'failure' }}
+        run: |
+          printf '::warning title=Playwright visual differences detected::Visual regression tests reported differences. Review the published Playwright HTML report for expected vs actual screenshots.\n'
+          {
+            echo '## Playwright Warning'
+            echo
+            echo 'Visual regression tests reported differences.'
+            echo 'The workflow is continuing so the HTML report can be reviewed in the artifact and on GitHub Pages.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

@@ -82,6 +82,8 @@ The Playwright workflow uploads a `playwright-report` artifact with the visual t
 For pushes to `main` or `master`, the Playwright workflow also publishes the same HTML report to GitHub Pages.
 Enable GitHub Pages for the repository using GitHub Actions as the source if it is not already enabled.
 
+Visual differences in the Playwright workflow are currently surfaced as workflow warnings so the HTML report can still be published and reviewed.
+
 Build or restart Postgres with database stats and file logging enabled:
 
 ```sh
