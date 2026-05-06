@@ -8,6 +8,15 @@ const screenshotOptions = {
   maxDiffPixelRatio: 0.02,
 }
 
+async function prepareForScreenshot(page) {
+	await page.waitForLoadState('networkidle')
+	await page.waitForFunction(() => document.fonts && document.fonts.status === 'loaded')
+	await page.waitForFunction(() => {
+		const element = document.getElementById('connection-status')
+		return element && element.textContent && element.textContent !== 'Checking API...'
+	})
+}
+
 const domainId = '11111111-1111-1111-1111-111111111111'
 const reportId = '22222222-2222-2222-2222-222222222222'
 
@@ -179,12 +188,14 @@ test.beforeEach(async ({ page }) => {
 test('landing page visual baseline', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByText('API connected (ok, mvp)')).toBeVisible()
+  await prepareForScreenshot(page)
   await expect(page).toHaveScreenshot('landing-page.png', screenshotOptions)
 })
 
 test('domains dashboard visual baseline', async ({ page }) => {
   await page.goto('/domains')
   await expect(page.getByRole('heading', { name: 'Monitored domains' })).toBeVisible()
+  await prepareForScreenshot(page)
   await expect(page).toHaveScreenshot('domains-dashboard.png', screenshotOptions)
 })
 
@@ -192,11 +203,13 @@ test('latest report visual baseline', async ({ page }) => {
   await page.goto(`/domains/${domainId}/report`)
   await expect(page.getByRole('heading', { name: 'example.com' })).toBeVisible()
   await expect(page.getByText('Fix This First')).toBeVisible()
+  await prepareForScreenshot(page)
   await expect(page).toHaveScreenshot('latest-report.png', screenshotOptions)
 })
 
 test('settings page visual baseline', async ({ page }) => {
   await page.goto('/settings')
   await expect(page.getByRole('heading', { name: 'Local configuration' })).toBeVisible()
+  await prepareForScreenshot(page)
   await expect(page).toHaveScreenshot('settings-page.png', screenshotOptions)
 })
