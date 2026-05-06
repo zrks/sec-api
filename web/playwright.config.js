@@ -14,6 +14,8 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    caret: 'hide',
+    scale: 'css',
     timezoneId: 'UTC',
     locale: 'en-US',
   },
