@@ -56,13 +56,13 @@ GitHub Actions CI is split across two workflows:
 
 The main CI workflow runs:
 
-- frontend dependency install and `npm run lint`
-- `go test -coverprofile=coverage.out ./...`
-- frontend production build
-- Go binary builds for `api`, `worker`, and `kuberhealthy-api-check`
-- Docker image builds for the same targets
-- distribution packaging into a `.tar.gz` artifact
-- SonarQube analysis when repository secrets are configured
+- `frontend` stage: frontend dependency install, `npm run lint`, and production build
+- `go-test` stage: `go test -coverprofile=coverage.out ./...`
+- `package` stage: Go binary builds, Docker image builds, and distribution packaging into a `.tar.gz` artifact
+- `sonarqube` stage: SonarQube analysis when repository secrets are configured
+
+The `frontend` and `go-test` stages run in parallel.
+The `package` and `sonarqube` stages start only after the required upstream artifacts are ready.
 
 Required GitHub secrets for SonarQube:
 
