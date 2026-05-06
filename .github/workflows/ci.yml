@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-build-package:
+    name: Test, Build, Package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Lint frontend sources
+        run: npm run lint
+        working-directory: web
+
+      - name: Run Go tests with coverage
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Build frontend assets
+        run: npm run build
+        working-directory: web
+
+      - name: Build Go binaries
+        run: |
+          mkdir -p dist/bin
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/bin/domainriskdigest-api ./cmd/api
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/bin/domainriskdigest-worker ./cmd/worker
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/bin/domainriskdigest-kuberhealthy-api-check ./cmd/kuberhealthy-api-check
+
+      - name: Build Docker images
+        run: docker build --target api -t domainriskdigest-api:ci . && docker build --target worker -t domainriskdigest-worker:ci . && docker build --target kuberhealthy-api-check -t domainriskdigest-kuberhealthy-api-check:ci .
+
+      - name: Prepare distribution package
+        run: |
+          rm -rf dist/package
+          mkdir -p dist/package
+          cp README.md dist/package/
+          cp -R deploy dist/package/
+          cp -R migrations dist/package/
+          cp -R web/dist dist/package/web-dist
+          cp dist/bin/domainriskdigest-api dist/package/
+          cp dist/bin/domainriskdigest-worker dist/package/
+          cp dist/bin/domainriskdigest-kuberhealthy-api-check dist/package/
+          VERSION="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            VERSION="pr-${{ github.event.pull_request.number }}-${GITHUB_SHA::7}"
+          elif [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            VERSION="${GITHUB_SHA::7}"
+          fi
+          tar -C dist/package -czf "dist/domainriskdigest-${VERSION}-linux-amd64.tar.gz" .
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+
+      - name: Upload distribution package
+        uses: actions/upload-artifact@v4
+        with:
+          name: domainriskdigest-package
+          path: dist/domainriskdigest-*.tar.gz
+
+  sonarqube:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    needs: test-build-package
+    if: ${{ secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != '' }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Run tests for SonarQube coverage
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Build frontend assets
+        run: npm run build
+        working-directory: web
+
+      - name: SonarQube scan
+        uses: SonarSource/sonarqube-scan-action@v4.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}

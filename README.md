@@ -47,6 +47,32 @@ Build the Kuberhealthy checker image:
 docker build --target kuberhealthy-api-check -t your-registry/domainriskdigest-kuberhealthy-check:latest .
 ```
 
+## CI
+
+GitHub Actions CI is defined in `.github/workflows/ci.yml`.
+It runs:
+
+- frontend dependency install and `npm run lint`
+- `go test -coverprofile=coverage.out ./...`
+- frontend production build
+- Go binary builds for `api`, `worker`, and `kuberhealthy-api-check`
+- Docker image builds for the same targets
+- distribution packaging into a `.tar.gz` artifact
+- SonarQube analysis when repository secrets are configured
+
+Required GitHub secrets for SonarQube:
+
+- `SONAR_TOKEN`
+- `SONAR_HOST_URL`
+
+The workflow uploads a distribution artifact containing:
+
+- Linux AMD64 binaries for the API, worker, and Kuberhealthy checker
+- `deploy/` manifests
+- `migrations/`
+- built frontend assets from `web/dist`
+- `README.md`
+
 Build or restart Postgres with database stats and file logging enabled:
 
 ```sh
